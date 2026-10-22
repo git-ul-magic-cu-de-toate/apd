@@ -1,0 +1,113 @@
+a = 0;
+b = 0;
+
+a1
+a.v();
+b.p();
+a2
+
+b1
+b.v();
+a.p();
+b2
+
+mutex = 1;
+
+mutex.p();
+c++;
+mutex.v();
+
+mutex.p();
+c++;
+mutex.v();
+
+n = no_of_threads;
+count = 0;
+mutex = semaphore(1)
+barrier = semaphore(0)
+
+
+rendezvous
+
+mutex.wait()
+count++
+if (count == n)
+	for i=1,n
+		barrier.signal()
+mutex.signal()
+
+barrier.wait()
+
+# critical point
+
+mutex.wait()
+count--
+if (count == 0)
+	for i = 1,n
+	barrier2.signal()
+mutex.signal()
+
+barrier2.wait()
+
+3.7.0
+
+leaders = semaphore(0)
+followers = semaphore(0)
+
+followers.v()
+leaders.p()
+dance()
+
+leaders.v()
+followers.p()
+dance()
+
+----------------------------
+mutex = Semaphore(1)
+barrier = Semaphore(4)
+fighters = Semaphore(0)
+healers = Semaphore(0)
+healers = 0
+fighters = 0
+
+
+HEALERS
+
+mutex.wait()
+healers++
+
+if fighters >= 3
+	fighters.signal(3)
+	fighters -= 3
+	healers.signal()
+	healers--
+else:
+	mutex.signal()
+
+healers.wait()
+
+make_squad()
+
+barrier_wait()
+mutex.signal()
+
+-------------------------------------
+FIGHTERS
+
+mutex.wait()
+fighter++
+if fighters >= 3 and healers >= 1:
+	fighters.signal(3)
+	fighters -= 3
+	healers.signal()
+	healers--
+else:
+	mutex.signal()
+
+fighters.wait()
+
+make_squad()
+
+barrier.wait()
+	
+		
