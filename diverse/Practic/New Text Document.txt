@@ -1,0 +1,148 @@
+Să se scrie, folosind C/C++ și MPI, un program care să implementeze paralelizarea ridicării la puterea k
+a unei matrice pătratice N x N în MPI, folosind P task-uri. Task-ul cu rangul 0 va genera matricea care
+se va ridica la puterea k și va fi responsabil de alocarea calculelor către celelalte task-uri, și tot el va
+afișa rezultatul final.
+În urma compilării, va rezulta un executabil numit testapd, care se va putea rula prin intermediul
+comenzii mpirun -np P ./testapd N k. Este sarcina task-ului 0 să genereze matricea inițială de
+dimensiune N x N ca fiind M[i][j] = i + j. Aveți mai jos trei exemple de rulare.
+$ mpirun -np 2 ./testapd 3 4
+210 372 534
+372 660 948
+534 948 1362
+$ mpirun -np 3 ./testapd 4 2
+14 20 26 32
+20 30 40 50
+6 40 54 68
+32 50 68 86
+$ mpirun -np 4 ./testapd 2 3
+2 5
+5 12
+Atenție! Doar task-ul cu rangul 0 are voie să afișeze rezultatul final.
+Programul trebuie să funcționeze corect pentru orice valori N și P care respectă 1 <= N <= 100, 1 <= P
+<= 8. Se poate presupune că numărul de argumente date programului este corect.
+Atenție! Doar rank-ului 0 îi este permis să folosească formulele de calcul pentru inițializarea
+matricei. Celelalte rank-uri vor primi de la acesta datele necesare.
+Atenție! Nerespectarea oricărei restricții de la punctele (de Atenție!) anterioare va face ca soluția
+să fie notată cu 0 (zero).
+
+
+Rezolvare:
+#include "mpi.h"
+#include <stdio.h>
+#include <stdlib.h>
+
+#define MASTER      0
+#define Tag_Send    1
+#define Tag_update  2
+
+int main (int argc, char *argv[]) {
+    int procs, rank;
+    MPI_Init(&argc, &argv);
+    MPI_Comm_size(MPI_COMM_WORLD, &procs);
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
+    /* Check the number of arguments and exit if insufficient */
+    if (argc < 3) {
+        if(rank == MASTER) {
+            fprintf(stderr, "Usage: mpirun -np P %s N k\n", argv[0]);
+        }
+        MPI_Finalize();
+        exit(1);
+    }
+
+    int N = atoi(argv[1]);
+    int K = atoi(argv[2]);
+
+    int M[N][N];
+    int base[N][N];
+    if(rank == MASTER) {
+        for (int i = 0; i < N; i++){
+            for (int j = 0; j < N; j++){
+                M[i][j] = i + j;
+                base[i][j] = i + j;
+                printf("%d ", M[i][j]);
+            }
+            printf("\n");
+        }
+    }
+
+    MPI_Bcast(M, N * N, MPI_INT, MASTER, MPI_COMM_WORLD);
+    MPI_Bcast(base, N * N, MPI_INT, MASTER, MPI_COMM_WORLD);
+    
+    int start = rank * (double)N / procs;
+    int end   = (rank + 1) * (double)N / procs;
+    if(end > N)
+        end = N;
+
+    
+    for (int iter = 1; iter < K; iter++){
+        int num_cols = end - start;
+        int res[N][num_cols];
+
+        for (int r = 0; r < N; r++){
+            for (int j = 0; j < num_cols; j++){
+                res[r][j] = 0;
+            }
+        }
+
+        // fiecare proces calculeaza doar end - start coloane din matrice
+        for (int r = 0; r < N; r++){
+            for (int j = start; j < end; j++){
+                for (int k = 0; k < N; k++){
+                    res[r][j - start] += base[r][k] * M[k][j];
+                }
+            }
+        }
+
+        if (rank != MASTER){
+            // trimite coloanele si intervalul lor
+            MPI_Send(&start, 1, MPI_INT, MASTER, Tag_Send, MPI_COMM_WORLD);
+            MPI_Send(&end, 1, MPI_INT, MASTER, Tag_Send, MPI_COMM_WORLD);
+            MPI_Send(res, N * num_cols, MPI_INT, MASTER, Tag_Send, MPI_COMM_WORLD);
+            // asteapta matricea noua
+            MPI_Recv(M, N * N, MPI_INT, MASTER, Tag_update, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        } else {
+            // fa update la portiunea ta
+            for (int r = 0; r < N; r++){
+                for (int j = start; j < end; j++){
+                    M[r][j] = res[r][j - start];
+                }
+            }
+            // primeste intervalul si coloanele si construiste noua matrice de inmultit cu baza
+            for (int proc = 1; proc < procs; proc++){
+                int startP, endP;
+                MPI_Recv(&startP, 1, MPI_INT, proc, Tag_Send, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+                MPI_Recv(&endP, 1, MPI_INT, proc, Tag_Send, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+                
+                int cols = endP - startP;
+                int block[N][cols];
+                MPI_Recv(block, N * cols, MPI_INT, proc, Tag_Send, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+
+                for (int r = 0; r < N; r++){
+                    for (int j = startP; j < endP; j++){
+                        M[r][j] = block[r][j - startP];
+                    }
+                }
+            }
+            // broadcast la celelalte procese cu matricea noua
+            for (int proc = 1; proc < procs; proc++){
+                MPI_Send(M, N * N, MPI_INT, proc, Tag_update, MPI_COMM_WORLD);
+            }
+        }
+
+    }
+
+    // master prints the result
+    if(rank == MASTER){
+        printf("Final result matrix:\n");
+        for (int i = 0; i < N; i++){
+            for (int j = 0; j < N; j++){
+                printf("%d ", M[i][j]);
+            }
+            printf("\n");
+        }
+    }
+
+    MPI_Finalize();
+    return 0;
+}
